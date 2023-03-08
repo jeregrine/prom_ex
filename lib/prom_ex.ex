@@ -475,70 +475,72 @@ defmodule PromEx do
     acc
   end
 
-  @doc false
-  def metrics_server_child_spec(acc, config, prom_ex_module, process_name) when is_map(config) do
-    transport_options = [num_acceptors: config.pool_size]
-    cowboy_opts = Keyword.drop(config.cowboy_opts, [:port, :transport_options])
+  if Code.ensure_loaded?(Plug.Cowboy) do
+    @doc false
+    def metrics_server_child_spec(acc, config, prom_ex_module, process_name) when is_map(config) do
+      transport_options = [num_acceptors: config.pool_size]
+      cowboy_opts = Keyword.drop(config.cowboy_opts, [:port, :transport_options])
 
-    port =
-      case Map.fetch(config, :port) do
-        {:ok, port} when is_integer(port) ->
-          port
+      port =
+        case Map.fetch(config, :port) do
+          {:ok, port} when is_integer(port) ->
+            port
 
-        {:ok, port} when is_binary(port) ->
-          String.to_integer(port)
+          {:ok, port} when is_binary(port) ->
+            String.to_integer(port)
 
-        :error ->
-          raise "PromEx.MetricsServer requires a :port config value"
-      end
+          :error ->
+            raise "PromEx.MetricsServer requires a :port config value"
+        end
 
-    scheme =
-      config
-      |> Map.fetch(:protocol)
-      |> case do
-        {:ok, "http"} ->
-          :http
+      scheme =
+        config
+        |> Map.fetch(:protocol)
+        |> case do
+          {:ok, "http"} ->
+            :http
 
-        {:ok, "https"} ->
-          :https
+          {:ok, "https"} ->
+            :https
 
-        {:ok, :http} ->
-          :http
+          {:ok, :http} ->
+            :http
 
-        {:ok, :https} ->
-          :https
+          {:ok, :https} ->
+            :https
 
-        :error ->
-          raise "PromEx.MetricsServer requires a :protocol config value of :http or :https"
+          :error ->
+            raise "PromEx.MetricsServer requires a :protocol config value of :http or :https"
 
-        _ ->
-          raise "Invalid :protocol config value provided to PromEx.MetricsServer (valid values are :http and :https)"
-      end
+          _ ->
+            raise "Invalid :protocol config value provided to PromEx.MetricsServer (valid values are :http and :https)"
+        end
 
-    plug_opts = %{
-      path: config.path,
-      prom_ex_module: prom_ex_module,
-      auth_strategy: Map.get(config, :auth_strategy),
-      auth_token: Map.get(config, :auth_token),
-      auth_user: Map.get(config, :auth_user),
-      auth_password: Map.get(config, :auth_password)
-    }
+      plug_opts = %{
+        path: config.path,
+        prom_ex_module: prom_ex_module,
+        auth_strategy: Map.get(config, :auth_strategy),
+        auth_token: Map.get(config, :auth_token),
+        auth_user: Map.get(config, :auth_user),
+        auth_password: Map.get(config, :auth_password)
+      }
 
-    plug_definition = {PromEx.MetricsServer.Plug, plug_opts}
+      plug_definition = {PromEx.MetricsServer.Plug, plug_opts}
 
-    spec =
-      Plug.Cowboy.child_spec(
-        ref: process_name,
-        scheme: scheme,
-        plug: plug_definition,
-        options: [{:port, port}, {:transport_options, transport_options} | cowboy_opts]
+      spec =
+        Plug.Cowboy.child_spec(
+          ref: process_name,
+          scheme: scheme,
+          plug: plug_definition,
+          options: [{:port, port}, {:transport_options, transport_options} | cowboy_opts]
+        )
+
+      Logger.info(
+        "PromEx is starting a standalone metrics server on port #{inspect(port)} over #{Atom.to_string(scheme)}"
       )
 
-    Logger.info(
-      "PromEx is starting a standalone metrics server on port #{inspect(port)} over #{Atom.to_string(scheme)}"
-    )
-
-    [spec | acc]
+      [spec | acc]
+    end
   end
 
   def metrics_server_child_spec(acc, :disabled, _prom_ex_module, _process_name) do
